@@ -1,0 +1,95 @@
+---
+- name: Install debian repos
+  hosts: all
+  tasks:
+
+    - name: Read vars
+      ansible.builtin.include_vars:
+        dir: vars
+        extensions:
+          - "yml"
+          - "yaml"
+      failed_when: false
+
+    - name: Ping
+      ansible.builtin.ping:
+
+    - name: Remove zabbix-release
+      ansible.builtin.apt:
+        name: zabbix-release
+        state: absent
+
+    - name: Create backup dirs
+      ansible.builtin.file:
+        path: /root/backups
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Backup /etc/apt
+      community.general.archive:
+        path: /etc/apt
+        dest: "/root/backups/apt_{{ ansible_date_time.epoch }}.tgz"
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Copy sources.list
+      ansible.builtin.copy:
+        src: files/sources.list
+        dest: /etc/apt/sources.list
+        decrypt: true
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Find all files in sources.list.d, auth.conf.d and preferences.d
+      ansible.builtin.find:
+        paths:
+          - /etc/apt/sources.list.d/
+          - /etc/apt/auth.conf.d/
+          - /etc/apt/preferences.d/
+        patterns:
+          - "*"
+      register: toremove_result
+
+    - name: Remove all files in sources.list.d, auth.conf.d and preferences.d
+      ansible.builtin.file:
+        path: "{{ item['path'] }}"
+        state: absent
+      with_items: "{{ toremove_result['files'] }}"
+
+    - name: Copy apt keys
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: /etc/apt/trusted.gpg.d/
+        decrypt: true
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+      with_fileglob:
+        - files/keys/*
+
+    - name: Copy auth conf
+      ansible.builtin.copy:
+        src: files/repo_auth.conf
+        dest: /etc/apt/auth.conf.d/repos_auth.conf
+        decrypt: true
+        owner: root
+        group: root
+        mode: "0400"
+        backup: true
+
+    - name: Copy 99nginx
+      ansible.builtin.copy:
+        src: files/99nginx
+        dest: /etc/apt/preferences.d/99nginx
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true

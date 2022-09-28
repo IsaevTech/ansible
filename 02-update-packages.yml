@@ -1,0 +1,20 @@
+---
+- name: Update packages
+  hosts: all
+  tasks:
+
+    - name: Read vars
+      ansible.builtin.include_vars:
+        dir: vars
+        extensions:
+          - "yml"
+          - "yaml"
+
+    - name: Ping
+      ansible.builtin.ping:
+
+    - name: Update all packages
+      ansible.builtin.apt:
+        update_cache: true
+        name: "*"
+        state: latest
