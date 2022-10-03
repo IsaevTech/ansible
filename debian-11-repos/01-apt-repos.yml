@@ -9,6 +9,7 @@
         extensions:
           - "yml"
           - "yaml"
+        ignore_unknown_extensions: true
       failed_when: false
 
     - name: Ping
@@ -71,16 +72,6 @@
         backup: true
       with_fileglob:
         - files/keys/*
-
-    - name: Copy auth conf
-      ansible.builtin.copy:
-        src: files/repo_auth.conf
-        dest: /etc/apt/auth.conf.d/repos_auth.conf
-        decrypt: true
-        owner: root
-        group: root
-        mode: "0400"
-        backup: true
 
     - name: Copy 99nginx
       ansible.builtin.copy:

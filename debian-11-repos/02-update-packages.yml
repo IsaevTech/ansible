@@ -9,6 +9,7 @@
         extensions:
           - "yml"
           - "yaml"
+        ignore_unknown_extensions: true
 
     - name: Ping
       ansible.builtin.ping:
