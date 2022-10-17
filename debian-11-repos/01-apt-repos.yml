@@ -81,6 +81,28 @@
         group: root
         mode: "0644"
 
+    - name: Add internal IP to /etc/hosts
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "100.65.0.14 repo.ismv.ru"
+        state: present
+      when: ansible_all_ipv4_addresses | ansible.utils.ipaddr(local_ip_range) | length > 0
+
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: true
+
+    - name: Find old files in /root/backups
+      ansible.builtin.find:
+        paths:
+          - /root/backups/
+        patterns:
+          - "apt_*.tgz"
+        age: 1w
+      register: toremove_result
+
+    - name: Remove old files in /root/backups
+      ansible.builtin.file:
+        path: "{{ item['path'] }}"
+        state: absent
+      with_items: "{{ toremove_result['files'] }}"
