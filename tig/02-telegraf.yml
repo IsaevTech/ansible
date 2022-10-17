@@ -1,0 +1,89 @@
+---
+- name: Install and configure telegraf
+  hosts: all
+  tasks:
+
+    - name: Read vars
+      ansible.builtin.include_vars:
+        dir: vars
+        extensions:
+          - "yml"
+          - "yaml"
+        ignore_unknown_extensions: true
+
+    - name: Ping
+      ansible.builtin.ping:
+
+    - name: Install telegraf
+      ansible.builtin.apt:
+        package:
+          - telegraf
+        state: present
+
+    - name: Generate telegraf config - simple server
+      ansible.builtin.template:
+        src: templates/telegraf.conf.j2
+        dest: /etc/telegraf/telegraf.conf
+        backup: true
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart telegraf
+      when:
+        - not role == "node"
+        - not role == "node-ext"
+        - not role == "manager"
+
+    - name: Generate telegraf config - docker
+      ansible.builtin.template:
+        src: templates/telegraf-docker.conf.j2
+        dest: /etc/telegraf/telegraf.conf
+        backup: true
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart telegraf
+      when: role == "node" or role == "node-ext"
+
+    - name: Generate telegraf config - docker manager
+      ansible.builtin.template:
+        src: templates/telegraf-docker-manager.conf.j2
+        dest: /etc/telegraf/telegraf.conf
+        backup: true
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart telegraf
+      when: role == "manager"
+
+    - name: Add telegraf user to docker group
+      ansible.builtin.user:
+        name: telegraf
+        groups:
+          - docker
+        append: true
+      notify: Restart telegraf
+      when: role == "node" or role == "node-ext" or role == "manager"
+
+    - name: Start and enable telegraf
+      ansible.builtin.systemd:
+        name: telegraf
+        state: started
+        enabled: true
+
+    - name: Test telegraf config
+      ansible.builtin.command:
+        cmd: "telegraf -test -config /etc/telegraf/telegraf.conf --input-filter {{ item }}"
+      with_items:
+        - cpu
+        - net
+        - mem
+      register: telegraf_test
+      failed_when: telegraf_test.rc != 0
+      changed_when: false
+
+  handlers:
+    - name: Restart telegraf
+      ansible.builtin.systemd:
+        name: telegraf
+        state: restarted

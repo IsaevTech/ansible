@@ -1,0 +1,47 @@
+# Global Agent Configuration
+[agent]
+  hostname = "{{ ansible_fqdn }}"
+  flush_interval = "10s"
+  flush_jitter = "2s"
+  interval = "10s"
+  collection_jitter = "2s"
+
+
+# Input Plugins
+[[inputs.cpu]]
+  percpu = true
+  totalcpu = true
+  collect_cpu_time = false
+  report_active = false
+
+[[inputs.disk]]
+  ignore_fs = ["tmpfs", "devtmpfs", "devfs", "iso9660", "overlay", "aufs", "squashfs"]
+
+[[inputs.diskio]]
+  devices = ["sd*", "vd*"]
+
+[[inputs.kernel]]
+
+[[inputs.mem]]
+
+[[inputs.processes]]
+
+[[inputs.swap]]
+
+[[inputs.system]]
+
+[[inputs.interrupts]]
+
+[[inputs.net]]
+
+[[inputs.netstat]]
+
+# Output Plugin InfluxDB
+[[outputs.influxdb]]
+  database = "{{ influx_database }}"
+  urls = [ "http://{{ influx_ip }}:8086" ]
+  username = "{{ influx_user }}"
+  password = "{{ influx_pass }}"
+
+[[processors.dedup]]
+  dedup_interval = "600s"

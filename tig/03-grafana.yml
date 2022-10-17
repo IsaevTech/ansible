@@ -1,0 +1,30 @@
+---
+- name: Install Grafana
+  hosts: mon
+  tasks:
+
+    - name: Read vars
+      ansible.builtin.include_vars:
+        dir: vars
+        extensions:
+          - "yml"
+          - "yaml"
+        ignore_unknown_extensions: true
+
+    - name: Ping
+      ansible.builtin.ping:
+
+    - name: Install Grafana
+      ansible.builtin.apt:
+        package:
+          - grafana
+        state: present
+      notify: Restart Grafana
+
+  handlers:
+    - name: Restart Grafana
+      ansible.builtin.systemd:
+        daemon_reload: true
+        name: grafana-server
+        state: restarted
+        enabled: true

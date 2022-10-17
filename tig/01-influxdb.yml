@@ -1,0 +1,36 @@
+---
+- name: Install InfluxDB
+  hosts: mon
+  tasks:
+
+    - name: Read vars
+      ansible.builtin.include_vars:
+        dir: vars
+        extensions:
+          - "yml"
+          - "yaml"
+        ignore_unknown_extensions: true
+      failed_when: false
+
+    - name: Ping
+      ansible.builtin.ping:
+
+    - name: Install InfluxDB
+      ansible.builtin.apt:
+        package:
+          - influxdb
+          - python3-influxdb
+        state: present
+
+    - name: Start InfluxDB
+      ansible.builtin.systemd:
+        name: influxdb
+        state: started
+        enabled: true
+
+    - name: Create Telegraf database
+      ansible.builtin.influxdb_database:
+        hostname: "{{ influx_ip }}"
+        database_name: telegraf
+        username: "{{ influx_user }}"
+        password: "{{ influx_pass }}"
