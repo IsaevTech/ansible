@@ -31,27 +31,49 @@
         - {regex: '^Hostname=', replace: '# Hostname='}
       notify: Restart zabbix agent
 
-    - name: Create Zabbix agent configuration files
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: touch
-        owner: root
-        group: root
-        mode: "0600"
-        access_time: preserve
-        modification_time: preserve
-      with_items:
-        - /etc/zabbix/zabbix_agent2.d/server.conf
-
     - name: Create Zabbix agent server configuration
       ansible.builtin.blockinfile:
         path: /etc/zabbix/zabbix_agent2.d/server.conf
         backup: true
+        create: true
+        owner: zabbix
+        group: zabbix
+        mode: "0600"
         block: |
           Server={{ server.ip }}:{{ server.port }}
           ServerActive={{ server.ip }}:{{ server.port }}
           Hostname={{ ansible_fqdn }}
       notify: Restart zabbix agent
+
+    - name: Create Zabbix agent tls configuration
+      when: tls.use
+      block:
+        - name: Create Zabbix agent tls configuration
+          ansible.builtin.blockinfile:
+            path: /etc/zabbix/zabbix_agent2.d/tls.conf
+            backup: true
+            create: true
+            owner: zabbix
+            group: zabbix
+            mode: "0600"
+            block: |
+              TLSConnect=psk
+              TLSAccept=psk
+              TLSPSKFile=/etc/zabbix/zabbix_agentd2.psk
+              TLSPSKIdentity={{ tls.identity }}
+          notify: Restart zabbix agent
+
+        - name: Create Zabbix agent tls psk file
+          ansible.builtin.lineinfile:
+            path: /etc/zabbix/zabbix_agentd2.psk
+            backup: true
+            create: true
+            owner: zabbix
+            group: zabbix
+            mode: "0600"
+            line: "{{ tls.psk }}"
+            state: present
+          notify: Restart zabbix agent
 
     - name: Get all groups
       ansible.builtin.getent:

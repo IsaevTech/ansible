@@ -103,23 +103,14 @@
         group: root
         mode: "0755"
 
-    - name: Create Zabbix configuration files
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: touch
-        owner: root
-        group: root
-        mode: "0600"
-        access_time: preserve
-        modification_time: preserve
-      with_items:
-        - /etc/zabbix/zabbix_server.conf.d/database.conf
-        - /etc/zabbix/zabbix_server.conf.d/pollers.conf
-
     - name: Create Zabbix database configuration
       ansible.builtin.blockinfile:
         path: /etc/zabbix/zabbix_server.conf.d/database.conf
         backup: true
+        create: true
+        owner: root
+        group: root
+        mode: "0600"
         block: |
           DBHost=localhost
           DBName={{ psql.db }}
@@ -131,6 +122,10 @@
       ansible.builtin.blockinfile:
         path: /etc/zabbix/zabbix_server.conf.d/pollers.conf
         backup: true
+        create: true
+        owner: root
+        group: root
+        mode: "0600"
         block: |
           StartPollers={{ start.pollers }}
           StartIPMIPollers={{ start.ipmipollers }}
