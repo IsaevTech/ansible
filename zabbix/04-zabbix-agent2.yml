@@ -40,7 +40,7 @@
         group: zabbix
         mode: "0600"
         block: |
-          Server={{ server.ip }}:{{ server.port }}
+          Server={{ server.ip }}
           ServerActive={{ server.ip }}:{{ server.port }}
           Hostname={{ ansible_fqdn }}
       notify: Restart zabbix agent
