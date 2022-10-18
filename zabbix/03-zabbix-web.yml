@@ -1,0 +1,89 @@
+---
+- name: Configure zabbix web
+  hosts: mon
+  tasks:
+
+    - name: Read vars
+      ansible.builtin.include_vars:
+        dir: vars
+        extensions:
+          - "yml"
+          - "yaml"
+        ignore_unknown_extensions: true
+
+    - name: Ping
+      ansible.builtin.ping:
+
+    - name: Disable and stop apache2
+      ansible.builtin.systemd:
+        name: apache2
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Uninstall apache2
+      ansible.builtin.apt:
+        package:
+          - apache2
+          - apache2-data
+          - apache2-utils
+        state: absent
+        purge: true
+
+    - name: Remove default nginx configuration
+      ansible.builtin.file:
+        path: /etc/nginx/conf.d/default.conf
+        state: absent
+
+    - name: Uncomment lines in nginx configuration
+      ansible.builtin.replace:
+        path: /etc/zabbix/nginx.conf
+        regexp: "{{ item.regex }}"
+        replace: "{{ item.replace }}"
+      with_items:
+        # Commented lines
+        - {regex: '^#.*listen.*;', replace: 'listen {{ ngx.port }};'}
+        - {regex: '^#.*server_name.*;', replace: 'server_name {{ ngx.server_name }};'}
+        # Uncommented lines
+        - {regex: '^listen.*;', replace: 'listen {{ ngx.port }};'}
+        - {regex: '^server_name.*;', replace: 'server_name {{ ngx.server_name }};'}
+      notify: Reload nginx
+
+    - name: Change user in php-fpm configuration
+      ansible.builtin.replace:
+        path: /etc/zabbix/php-fpm.conf
+        regexp: "{{ item.regex }}"
+        replace: "{{ item.replace }}"
+      with_items:
+        - {regex: '^user = www-data', replace: 'user = nginx'}
+        - {regex: '^group = www-data', replace: 'group = nginx'}
+        - {regex: '^listen.owner = www-data', replace: 'listen.owner = nginx'}
+      notify: Restart php-fpm
+
+    - name: Configure web database connection
+      ansible.builtin.template:
+        src: zabbix.conf.php.j2
+        dest: /usr/share/zabbix/conf/zabbix.conf.php
+        owner: root
+        group: nginx
+        mode: "0640"
+
+    - name: Enable and start nginx and php7.4-fpm
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      with_items:
+        - nginx
+        - php7.4-fpm
+
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
+
+    - name: Restart php-fpm
+      ansible.builtin.systemd:
+        name: php7.4-fpm
+        state: restarted

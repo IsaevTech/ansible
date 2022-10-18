@@ -1,0 +1,80 @@
+---
+- name: Configure zabbix agent2
+  hosts: all
+  tasks:
+
+    - name: Read vars
+      ansible.builtin.include_vars:
+        dir: vars
+        extensions:
+          - "yml"
+          - "yaml"
+        ignore_unknown_extensions: true
+
+    - name: Ping
+      ansible.builtin.ping:
+
+    - name: Install zabbix-agent2
+      ansible.builtin.apt:
+        package:
+          - zabbix-agent2
+        state: present
+
+    - name: Comment server and hostname configuration in zabbix agent configuration file
+      ansible.builtin.replace:
+        path: /etc/zabbix/zabbix_agent2.conf
+        regexp: "{{ item.regex }}"
+        replace: "{{ item.replace }}"
+      with_items:
+        - {regex: '^Server=', replace: '# Server='}
+        - {regex: '^ServerActive=', replace: '# ServerActive='}
+        - {regex: '^Hostname=', replace: '# Hostname='}
+      notify: Restart zabbix agent
+
+    - name: Create Zabbix agent configuration files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: touch
+        owner: root
+        group: root
+        mode: "0600"
+        access_time: preserve
+        modification_time: preserve
+      with_items:
+        - /etc/zabbix/zabbix_agent2.d/server.conf
+
+    - name: Create Zabbix agent server configuration
+      ansible.builtin.blockinfile:
+        path: /etc/zabbix/zabbix_agent2.d/server.conf
+        backup: true
+        block: |
+          Server={{ server.ip }}:{{ server.port }}
+          ServerActive={{ server.ip }}:{{ server.port }}
+          Hostname={{ ansible_fqdn }}
+      notify: Restart zabbix agent
+
+    - name: Get all groups
+      ansible.builtin.getent:
+        database: group
+        split: ':'
+
+    - name: Add zabbix user to group Docker
+      ansible.builtin.user:
+        user: zabbix
+        groups:
+          - docker
+        append: true
+      when: "'docker' in ansible_facts.getent_group"
+      notify: Restart zabbix agent
+
+    - name: Enable and start zabbix agent
+      ansible.builtin.systemd:
+        name: zabbix-agent2
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart zabbix agent
+      ansible.builtin.systemd:
+        name: zabbix-agent2
+        state: restarted

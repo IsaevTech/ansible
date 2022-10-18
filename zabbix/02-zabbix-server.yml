@@ -1,0 +1,168 @@
+---
+- name: Install and configure zabbix-server
+  hosts: mon
+  tasks:
+
+    - name: Read vars
+      ansible.builtin.include_vars:
+        dir: vars
+        extensions:
+          - "yml"
+          - "yaml"
+        ignore_unknown_extensions: true
+
+    - name: Ping
+      ansible.builtin.ping:
+
+    - name: Install zabbix packages
+      ansible.builtin.apt:
+        package:
+          - zabbix-server-pgsql
+          - zabbix-frontend-php
+          - php7.4-pgsql
+          - zabbix-nginx-conf
+          - zabbix-sql-scripts
+          - zabbix-agent2
+        state: present
+
+    - name: Read psql_server_sql_init_flag file
+      ansible.builtin.stat:
+        path: /root/.ansible_psql_server_sql_init
+      register: psql_server_sql_init_flag
+
+    - name: Deploy database schema
+      when: not psql_server_sql_init_flag.stat.exists
+      block:
+        - name: Unpack server.sql.gz
+          ansible.builtin.command:
+            cmd: "gunzip -k server.sql.gz"
+            creates: /usr/share/zabbix-sql-scripts/postgresql/server.sql
+            chdir: /usr/share/zabbix-sql-scripts/postgresql/
+
+        - name: Deploy Zabbix database schema
+          community.postgresql.postgresql_script:
+            db: "{{ psql.db }}"
+            path: /usr/share/zabbix-sql-scripts/postgresql/server.sql
+            login_user: "{{ psql.user }}"
+            login_password: "{{ psql.pass }}"
+            login_host: localhost
+
+        - name: Create flag file
+          ansible.builtin.file:
+            path: /root/.ansible_psql_server_sql_init
+            state: touch
+            owner: root
+            group: root
+            mode: "0644"
+
+    - name: Read psql_timescale_sql_init_flag file
+      ansible.builtin.stat:
+        path: /root/.ansible_psql_timescale_sql_init_flag
+      register: psql_timescale_sql_init_flag
+
+    - name: Deploy timescale schema
+      when: not psql_timescale_sql_init_flag.stat.exists
+      block:
+        - name: Deploy Zabbix timescale schema
+          community.postgresql.postgresql_script:
+            db: "{{ psql.db }}"
+            path: /usr/share/zabbix-sql-scripts/postgresql/timescaledb.sql
+            login_user: "{{ psql.user }}"
+            login_password: "{{ psql.pass }}"
+            login_host: localhost
+
+        - name: Create flag file
+          ansible.builtin.file:
+            path: /root/.ansible_psql_timescale_sql_init_flag
+            state: touch
+            owner: root
+            group: root
+            mode: "0644"
+
+    - name: Comment DB configuration in zabbix configuration file
+      ansible.builtin.replace:
+        path: /etc/zabbix/zabbix_server.conf
+        regexp: "{{ item.regex }}"
+        replace: "{{ item.replace }}"
+      with_items:
+        - {regex: '^DBUser=', replace: '# DBUser='}
+        - {regex: '^DBName=', replace: '# DBName='}
+      notify: Restart zabbix server
+
+    - name: Create Include param in zabbix configuration file
+      ansible.builtin.lineinfile:
+        path: /etc/zabbix/zabbix_server.conf
+        line: 'Include=/etc/zabbix/zabbix_server.conf.d/*.conf'
+        state: present
+
+    - name: Create /etc/zabbix/zabbix_server.conf.d directory
+      ansible.builtin.file:
+        path: /etc/zabbix/zabbix_server.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create Zabbix configuration files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: touch
+        owner: root
+        group: root
+        mode: "0600"
+        access_time: preserve
+        modification_time: preserve
+      with_items:
+        - /etc/zabbix/zabbix_server.conf.d/database.conf
+        - /etc/zabbix/zabbix_server.conf.d/pollers.conf
+
+    - name: Create Zabbix database configuration
+      ansible.builtin.blockinfile:
+        path: /etc/zabbix/zabbix_server.conf.d/database.conf
+        backup: true
+        block: |
+          DBHost=localhost
+          DBName={{ psql.db }}
+          DBUser={{ psql.user }}
+          DBPassword={{ psql.pass }}
+      notify: Restart zabbix server
+
+    - name: Create Zabbix pollers configuration
+      ansible.builtin.blockinfile:
+        path: /etc/zabbix/zabbix_server.conf.d/pollers.conf
+        backup: true
+        block: |
+          StartPollers={{ start.pollers }}
+          StartIPMIPollers={{ start.ipmipollers }}
+          StartPreprocessors={{ start.preprocessors }}
+          StartPollersUnreachable={{ start.pollersunreachable }}
+          StartHistoryPollers={{ start.historypollers }}
+          StartTrappers={{ start.trappers }}
+          StartPingers={{ start.pingers }}
+          StartDiscoverers={{ start.discoverers }}
+          StartHTTPPollers={{ start.httppollers }}
+          StartTimers={{ start.timers }}
+          StartEscalators={{ start.escalators }}
+          StartAlerters={{ start.alerters }}
+          StartJavaPollers={{ start.javapollers }}
+          StartVMwareCollectors={{ start.vmwarecollectors }}
+          StartSNMPTrapper={{ start.snmptrapper }}
+          StartDBSyncers={{ start.dbsyncers }}
+          StartProxyPollers={{ start.proxypollers }}
+          StartLLDProcessors={{ start.lldprocessors }}
+          StartReportWriters={{ start.reportwriters }}
+          StartODBCPollers={{ start.odbcpollers }}
+      notify: Restart zabbix server
+
+    - name: Start and enable zabbix server
+      ansible.builtin.systemd:
+        name: zabbix-server
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart zabbix server
+      ansible.builtin.systemd:
+        name: zabbix-server
+        state: restarted
+        enabled: true

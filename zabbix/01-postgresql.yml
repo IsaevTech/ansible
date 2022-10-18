@@ -1,0 +1,85 @@
+---
+- name: Install Postgresql
+  hosts: mon
+  tasks:
+
+    - name: Read vars
+      ansible.builtin.include_vars:
+        dir: vars
+        extensions:
+          - "yml"
+          - "yaml"
+        ignore_unknown_extensions: true
+      failed_when: false
+
+    - name: Ping
+      ansible.builtin.ping:
+
+    - name: Install Postgresql
+      ansible.builtin.apt:
+        package:
+          - postgresql-14
+          - python3-psycopg2
+          - acl
+        state: present
+      notify: Restart Postgresql
+
+    - name: Install TimescaleDB
+      ansible.builtin.apt:
+        package:
+          - timescaledb-2-postgresql-14=2.7.*
+          - timescaledb-2-loader-postgresql-14=2.7.*
+        state: present
+      notify: Restart Postgresql
+
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Create database for zabbix
+      community.postgresql.postgresql_db:
+        db: "{{ psql.db }}"
+        encoding: UTF-8
+      become: true
+      become_method: sudo
+      become_user: postgres
+
+    - name: Create postgres user
+      community.postgresql.postgresql_user:
+        name: "{{ psql.user }}"
+        db: "{{ psql.db }}"
+        password: "{{ psql.pass }}"
+        priv: ALL
+        state: present
+      become: true
+      become_method: sudo
+      become_user: postgres
+
+    - name: Preload timescaledb
+      ansible.builtin.lineinfile:
+        path: /etc/postgresql/14/main/postgresql.conf
+        line: shared_preload_libraries = 'timescaledb'
+        state: present
+      notify: Restart Postgresql
+
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Create timescaledb extension
+      community.postgresql.postgresql_ext:
+        db: "{{ psql.db }}"
+        name: timescaledb
+        state: present
+      become: true
+      become_method: sudo
+      become_user: postgres
+      notify: Restart Postgresql
+
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers
+
+  handlers:
+    - name: Restart Postgresql
+      ansible.builtin.systemd:
+        name: postgresql
+        state: restarted
+        enabled: true
