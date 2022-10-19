@@ -1,0 +1,22 @@
+---
+- name: Install teleport
+  hosts: all
+  tasks:
+
+    - name: Read vars
+      ansible.builtin.include_vars:
+        dir: vars
+        extensions:
+          - "yml"
+          - "yaml"
+        ignore_unknown_extensions: true
+      failed_when: false
+
+    - name: Ping
+      ansible.builtin.ping:
+
+    - name: Install teleport
+      ansible.builtin.apt:
+        package:
+          - teleport
+        state: present

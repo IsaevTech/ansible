@@ -1,0 +1,46 @@
+version: v2
+teleport:
+  nodename: {{ ansible_fqdn }}
+  data_dir: /var/lib/teleport
+  join_params:
+    token_name: {{ tp_join_token }}
+    method: token
+  auth_servers:
+  - {{ tp.ip }}:{{ tp.port }}
+  log:
+    output: stderr
+    severity: INFO
+    format:
+      output: text
+  ca_pin: ""
+  diag_addr: ""
+auth_service:
+  enabled: "no"
+ssh_service:
+  enabled: "yes"
+  commands:
+  - name: hostname
+    command: [hostname, -f]
+    period: 1440m0s
+  - name: os
+    command: [uname, -o]
+    period: 1440m0s
+  - name: arch
+    command: [uname, -m]
+    period: 1440m0s
+  - name: kernel
+    command: [uname, -r]
+    period: 60m0s
+  - name: tz
+    command: [cat, /etc/timezone]
+    period: 1440m0s
+  - name: vendor
+    command: [cat, /sys/class/dmi/id/sys_vendor]
+    period: 1440m0s
+  - name: virt
+    command: [bash, -c, "systemd-detect-virt || true"]
+    period: 1440m0s
+proxy_service:
+  enabled: "no"
+  https_keypairs: []
+  acme: {}

@@ -1,0 +1,66 @@
+# tp:
+#   domain: tp.ismv.ru
+#   email: admin@ismv.ru
+#   acme: true
+---
+- name: Configure teleport client
+  hosts: all:!teleport
+  tasks:
+
+    - name: Read vars
+      ansible.builtin.include_vars:
+        dir: vars
+        extensions:
+          - "yml"
+          - "yaml"
+        ignore_unknown_extensions: true
+      failed_when: false
+
+    - name: Read teleport status
+      ansible.builtin.command:
+        cmd: tctl status
+      register: teleport_status
+      changed_when: false
+      failed_when: false
+
+    - name: Init teleport configuration
+      when: teleport_status.rc == 1 and teleport_status.stderr | regex_search('.*no such file or directory.*') is not none
+      block:
+        - name: Get teleport connect token
+          ansible.builtin.command:
+            cmd: tctl tokens add --type=node --ttl=1h --format json
+          register: tctl_token_command
+          changed_when: tctl_token_command.rc == 0
+          failed_when: tctl_token_command.rc != 0
+          delegate_to: "{{ groups['teleport'][0] }}"
+          run_once: true
+
+        - name: Set fact tctl_token_json
+          ansible.builtin.set_fact:
+            tctl_token_json: "{{ tctl_token_command.stdout | from_json }}"
+
+        - name: Set fact tp_join_token
+          ansible.builtin.set_fact:
+            tctl_token_json: "{{ tctl_token_command.stdout | from_json }}"
+            tp_join_token: "{{ tctl_token_json.token }}"
+
+        - name: Template teleport.yaml
+          ansible.builtin.template:
+            src: teleport.yaml.j2
+            dest: /etc/teleport.yaml
+            owner: root
+            group: root
+            mode: "0600"
+          notify: Restart teleport
+
+    - name: Enable and start teleport
+      ansible.builtin.systemd:
+        name: teleport
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart teleport
+      ansible.builtin.systemd:
+        name: teleport
+        state: restarted

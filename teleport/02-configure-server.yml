@@ -1,0 +1,62 @@
+# tp:
+#   domain: tp.ismv.ru
+#   email: admin@ismv.ru
+#   acme: true
+---
+- name: Configure teleport server
+  hosts: teleport
+  tasks:
+
+    - name: Read vars
+      ansible.builtin.include_vars:
+        dir: vars
+        extensions:
+          - "yml"
+          - "yaml"
+        ignore_unknown_extensions: true
+      failed_when: false
+
+    - name: Read teleport_server_init_flag file
+      ansible.builtin.stat:
+        path: /root/.ansible_teleport_server_init
+      register: teleport_server_init_flag
+
+    - name: Init teleport configuration
+      when: not teleport_server_init_flag.stat.exists
+      block:
+        - name: Generate teleport configuration
+          ansible.builtin.command:
+            cmd: "teleport configure --acme --acme-email={{ tp.email }} --cluster-name={{ tp.domain }} --output=\"/etc/teleport.yaml\""
+            creates: /etc/teleport.yaml
+          notify: Restart teleport
+
+        - name: Create flag file
+          ansible.builtin.file:
+            path: /root/.ansible_teleport_server_init
+            state: touch
+            owner: root
+            group: root
+            mode: "0644"
+
+    - name: Enable and start teleport
+      ansible.builtin.systemd:
+        name: teleport
+        state: started
+        enabled: true
+
+    - name: Create teleport admin user
+      ansible.builtin.command:
+        cmd: "tctl users add {{ tp.admin }} --roles=editor,access --logins=root,{{ tp.admin }}"
+      register: create_admin
+      failed_when: create_admin.rc != 0 and create_admin.stderr | regex_search('.*already registered.*') is none
+      changed_when: create_admin.rc == 0 and create_admin.stdout | regex_search('.*https://.*:443/web/invite/.*') is not none
+
+    - name: Echo admin user url
+      ansible.builtin.debug:
+        var: create_admin.stdout
+
+  handlers:
+    - name: Restart teleport
+      ansible.builtin.systemd:
+        name: teleport
+        state: restarted
